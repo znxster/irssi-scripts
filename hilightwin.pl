@@ -1,57 +1,87 @@
 #
-# Print hilighted messages & private messages to window named "hilight" for
-# irssi 0.7.99 by Timo Sirainen
+# This script will print hilighted messages into a window called 'hilight'.
+# 
+# Originally written by Timo Sirainen <tss@iki.fi>
+# - Places all hilighted messages into a window called "hilight"
+# Amended by Mark Sangster <znxster@gmail.com>
+# - Prints a timestamp with the messages
+# - Now allows toggling private messages to show or not.
+# - Using formats to print (allows basic theme adjustment)
 #
-# Modded a tiny bit by znx to stop private messages entering the hilighted
-# window (can be toggled) and to put up a timestamp.
+# This script is released in the Public Domain.
 #
+# Basic Usage:
+# /window new split
+# /window name hilight
+# /script load hilightwin.pl
+# 
+# Suggested usage:
+# /window new split
+# /window name hilight
+# /window size 10
+# /statusbar topic type window
+# /statusbar topic visible active
+# /statusbar window_inact disable
+# /script load hilightwin.pl
+# 
+# Toggle private messages with:
+# /toggle hilightwin_showprivmsg
+# 
 
 use Irssi;
 use POSIX;
 use vars qw($VERSION %IRSSI); 
 
-$VERSION = "0.02";
+$VERSION = "0.03";
 %IRSSI = (
-    authors     => "Timo \'cras\' Sirainen, Mark \'znx\' Sangster",
-    contact     => "tss\@iki.fi, znxster\@gmail.com", 
-    name        => "hilightwin",
-    description => "Print hilighted messages to window named \"hilight\"",
-    license     => "Public Domain",
-    url         => "http://irssi.org/",
-    changed     => "Sun May 25 18:59:57 BST 2008"
+	authors		=> "Timo \'cras\' Sirainen and Mark \'znx\' Sangster",
+    contact		=> "tss\@iki.fi, znxster\@gmail.com", 
+    name		=> "hilightwin",
+    description	=> "Print hilighted messages to window named \"hilight\"",
+    license		=> "Public Domain",
+    url			=> "http://irssi.org/",
+    changed		=> "Sat Apr  9 18:18:54 BST 2011",
 );
 
-sub sig_printtext {
-    my ($dest, $text, $stripped) = @_;
+# Setup the theme for the script
+Irssi::theme_register([
+	'hilightwin_loaded', '%R>>%n %_hilightwin:%_ Version $0 by $1.',
+	'hilightwin_missing', '%R>>%n %_hilightwin:%_ No window named "hilight" was found, please create it',
+	'hilightwin_output', '$0 $1',
+	'hilightwin_public_output', '$0 $1: $2',
+]);
 
-    my $opt = MSGLEVEL_HILIGHT;
+# Main
+sub hilightwin_signal {
+	my ($dest, $text, $ignored) = @_;
+	$window = Irssi::window_find_name('hilight');
 
-    if(Irssi::settings_get_bool('hilightwin_showprivmsg')) {
-        $opt = MSGLEVEL_HILIGHT|MSGLEVEL_MSGS;
-    }
-    
-    if(
-        ($dest->{level} & ($opt)) &&
-        ($dest->{level} & MSGLEVEL_NOHILIGHT) == 0
-    ) {
-        $window = Irssi::window_find_name('hilight');
-        
-        if ($dest->{level} & MSGLEVEL_PUBLIC) {
-            $text = $dest->{target}.": ".$text;
-        }
-        $text = strftime(
-            Irssi::settings_get_str('timestamp_format')." ",
-            localtime
-        ).$text;
-        $window->print($text, MSGLEVEL_NEVER) if ($window);
-    }
+	# Skip if the named window doesn't exist
+	if($window) {
+		my $opt = MSGLEVEL_HILIGHT;
+		$opt = MSGLEVEL_HILIGHT|MSGLEVEL_MSGS if(Irssi::settings_get_bool('hilightwin_showprivmsg'));
+		
+		if( ($dest->{level} & ($opt)) && ($dest->{level} & MSGLEVEL_NOHILIGHT) == 0 ) {
+			$time = strftime( Irssi::settings_get_str('timestamp_format')." ", localtime );
+			if($dest->{level} & MSGLEVEL_PUBLIC) {
+				$window->printformat(MSGLEVEL_NEVER, 'hilightwin_public_output', $time, $dest->{target}, $text);
+			}
+			else {
+				$window->printformat(MSGLEVEL_NEVER, 'hilightwin_output', $time, $text);
+			}
+		}
+	}
 }
 
-$window = Irssi::window_find_name('hilight');
-Irssi::print("Create a window named 'hilight'") if (!$window);
-
+# Settings
 Irssi::settings_add_bool('hilightwin','hilightwin_showprivmsg',1);
 
-Irssi::signal_add('print text', 'sig_printtext');
+# Signals
+Irssi::signal_add('print text', 'hilightwin_signal');
 
-# vim:set ts=4 sw=4 et:
+# On load
+$window = Irssi::window_find_name('hilight');
+Irssi::printformat(MSGLEVEL_CLIENTCRAP, 'hilightwin_missing') if (!$window);
+Irssi::printformat(MSGLEVEL_CLIENTCRAP, 'hilightwin_loaded', $VERSION, $IRSSI{authors});
+
+# vim:set ts=4 sw=4 noet:
